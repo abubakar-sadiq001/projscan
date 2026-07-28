@@ -52,10 +52,15 @@ var rootCmd = &cobra.Command{
 
 		time.Sleep(1 * time.Second)
 		if args[0] == "." {
-			fmt.Println("Opening current dir for scanning")
+			wd, err := os.Getwd()
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Opening your current working directory: %s\n", wd)
 		} else {
 
-			fmt.Printf("Opening dir %s for scanning\n", args[0])
+			fmt.Printf("Opening directory %s for scanning\n", args[0])
 		}
 
 		fmt.Printf("\n\n")
