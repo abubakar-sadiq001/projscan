@@ -1,6 +1,2 @@
-.js
-.ts
-.jsx
-.tsx
-
-dir_scanner_test.go
+# Added by goreleaser init:
+dist/
