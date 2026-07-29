@@ -1,12 +1,13 @@
 name: Release
 
+# 1. This tells GitHub exactly when to run the build automatically
 on:
   push:
     tags:
-      - "v*"
+      - "v*" # Triggers automatically when you push a tag like v1.0.0
 
 permissions:
-  contents: write
+  contents: write # Crucial: Allows GoReleaser to upload binaries to your release
 
 jobs:
   goreleaser:
@@ -16,13 +17,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Essential: GoReleaser needs the full git history to generate a changelog
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
+      # 2. This step automatically runs GoReleaser to compile and publish
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
