@@ -17,50 +17,56 @@ var ExtensionArgsSlice []string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "my-cli [argument]",
-	Short: "A powerful CLI tool built with Cobra",
-	Long: `projscan is lightweight CLI tool for scanning My CLI is a demonstration application built with Cobra.
-	 
-	  This application shows how to create professional command-line
-   	  tools with proper flag handling, subcommands, and configuration.`,
+	Use:   "projscan",
+	Short: "A developer's pocket companion for quickly understanding what's inside any project directory.",
+	Long:  `A developer's pocket companion for quickly understanding what's inside any project directory. ProjScan scans folders, breaks down file types by extension, counts lines of code, and flags React components that have grown a little too large. No configuration, no fuss, just actionable insight straight from the command line.`,
 
 	Args: func(cmd *cobra.Command, args []string) error { // 1 argument is required to run this command.
-		if len(args) < 1 {
-			return fmt.Errorf("requires at least one argument")
-		}
+		// if len(args) < 1 {
+		// 	return fmt.Errorf("requires at least one argument")
+		// }
 
-		if len(args) > 1 {
-			return fmt.Errorf("too many arguments (max 1)")
-		}
+		// if len(args) > 1 {
+		// 	return fmt.Errorf("too many arguments (max 1)")
+		// }
 
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		info, err := os.Stat(args[0])
-		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Printf("Error: Directory '%s' does not exist\n", args[0])
+		version, _ := cmd.Flags().GetBool("version")
+		if version {
+			helpers.PrintVersion()
+			return
+		}
+
+		if len(args) >= 1 {
+
+			info, err := os.Stat(args[0])
+			if err != nil {
+				if os.IsNotExist(err) {
+					fmt.Printf("Error: Directory '%s' does not exist\n", args[0])
+					return
+				}
+				fmt.Printf("Error: %v\n", err)
 				return
 			}
-			fmt.Printf("Error: %v\n", err)
-			return
-		}
-		if !info.IsDir() {
-			fmt.Printf("Error: '%s' is not a directory\n", args[0])
-			return
-		}
+			if !info.IsDir() {
+				fmt.Printf("Error: '%s' is not a directory\n", args[0])
+				return
+			}
 
-		time.Sleep(1 * time.Second)
-		if args[0] == "." {
-			fmt.Println("Opening current dir for scanning")
-		} else {
+			time.Sleep(1 * time.Second)
+			if args[0] == "." {
+				fmt.Println("Opening current dir for scanning")
+			} else {
 
-			fmt.Printf("Opening dir %s for scanning\n", args[0])
+				fmt.Printf("Opening dir %s for scanning\n", args[0])
+			}
+
+			fmt.Printf("\n\n")
+			helpers.ScanDirectory(args[0], ExtensionArgsSlice)
+			helpers.PrintStats()
 		}
-
-		fmt.Printf("\n\n")
-		helpers.ScanDirectory(args[0], ExtensionArgsSlice)
-		helpers.PrintStats()
 	},
 }
 
@@ -69,7 +75,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		fmt.Println(err)
 	}
 }
 
@@ -79,4 +85,5 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringSliceVarP(&ExtensionArgsSlice, "extension", "e", ExtensionArgsSlice, "Specify any extension type to scan")
+	rootCmd.Flags().BoolP("version", "v", false, "Print the version information")
 }
