@@ -1,5 +1,3 @@
-md
-
 # ProjScan
 
 A developer's pocket companion for quickly understanding what's inside any project directory. ProjScan scans folders, breaks down file types by extension, counts lines of code, and flags React components that have grown a little too large. No configuration, no fuss, just actionable insight straight from the command line.
