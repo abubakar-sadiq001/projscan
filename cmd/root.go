@@ -70,7 +70,7 @@ var rootCmd = &cobra.Command{
 			wg.Add(1)
 			now := time.Now()
 
-			helpers.ScanDirectory(args[0], ExtensionArgsSlice, &wg)
+			go helpers.ScanDirectory(args[0], ExtensionArgsSlice, &wg)
 			wg.Wait()
 
 			helpers.PrintStats()
