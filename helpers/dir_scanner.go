@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // FileInfo stores summary information about a single file discovered during scanning.
@@ -75,7 +76,9 @@ func ReportPanic() {
 }
 
 // ScanDirectory recursively walks a directory tree and records stats for matching files.
-func ScanDirectory(path string, extensionArgsSlice []string) {
+func ScanDirectory(path string, extensionArgsSlice []string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	// Start a background spinner so users get feedback during the scan.
 	stopSpinner := make(chan bool)
 	go showSpinner(stopSpinner)
@@ -96,7 +99,8 @@ func ScanDirectory(path string, extensionArgsSlice []string) {
 
 		if file.IsDir() {
 			// Recurse into subdirectories so the scan covers the whole project.
-			ScanDirectory(filePath, extensionArgsSlice)
+			wg.Add(1)
+			go ScanDirectory(filePath, extensionArgsSlice, wg)
 		} else {
 			fileExtension := filepath.Ext(fileName)
 

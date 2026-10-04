@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/abubakar-sadiq001/projscan/helpers"
@@ -33,6 +34,8 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		var wg sync.WaitGroup
+
 		version, _ := cmd.Flags().GetBool("version")
 		if version {
 			helpers.PrintVersion()
@@ -64,8 +67,15 @@ var rootCmd = &cobra.Command{
 			}
 
 			fmt.Printf("\n\n")
-			helpers.ScanDirectory(args[0], ExtensionArgsSlice)
+			wg.Add(1)
+			now := time.Now()
+
+			helpers.ScanDirectory(args[0], ExtensionArgsSlice, &wg)
+			wg.Wait()
+
 			helpers.PrintStats()
+			elapsed := time.Since(now)
+			fmt.Printf("\n\nScan completed in %s\n", elapsed)
 		}
 	},
 }
