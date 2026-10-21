@@ -5,58 +5,9 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-)
 
-var expectedExtensions = map[string]struct {
-	count      int
-	totalSize  int64
-	totalLines int
-	fileInfo   []struct {
-		name       string
-		lines      int
-		isCompFile bool
-	}
-	totalCompFiles int
-}{
-	".js": {
-		count:          2,
-		totalLines:     7, // foo.js (2), Component.js (5)
-		totalCompFiles: 1, // Component.js is component
-		fileInfo: []struct {
-			name       string
-			lines      int
-			isCompFile bool
-		}{
-			{name: "foo.js", lines: 2, isCompFile: false},
-			{name: "Component.js", lines: 5, isCompFile: true},
-		},
-	},
-	".tsx": {
-		count:          2,
-		totalLines:     5, // Bar.tsx (3), sub/Another.tsx (2)
-		totalCompFiles: 2, // both start with uppercase
-		fileInfo: []struct {
-			name       string
-			lines      int
-			isCompFile bool
-		}{
-			{name: "Bar.tsx", lines: 3, isCompFile: true},
-			{name: "Another.tsx", lines: 2, isCompFile: true},
-		},
-	},
-	".ts": {
-		count:          1,
-		totalLines:     1, // baz.ts
-		totalCompFiles: 0, // starts with lowercase
-		fileInfo: []struct {
-			name       string
-			lines      int
-			isCompFile bool
-		}{
-			{name: "baz.ts", lines: 1, isCompFile: false},
-		},
-	},
-}
+	"github.com/stretchr/testify/assert"
+)
 
 var files = []struct{ name, content string }{
 	{"foo.js", "line1\nline2\n"},
@@ -70,7 +21,7 @@ var files = []struct{ name, content string }{
 
 func Test_Scan_Directory(t *testing.T) {
 	Stats = make(map[string]*FileStats)
-	// Mu := sync.Mutex{}
+	Mu = sync.Mutex{}
 	var wg sync.WaitGroup
 
 	tmpDir := t.TempDir()
@@ -91,10 +42,8 @@ func Test_Scan_Directory(t *testing.T) {
 	ScanDirectory(tmpDir, filter, &wg)
 	wg.Wait()
 
-	if len(Stats) != 5 {
-		t.Fatalf("expected 5 extensions, got %d: %v", len(Stats), Stats)
-	}
-
+	assert.Len(t, Stats, 5)
+	assert.NotNil(t, Stats)
 }
 
 func Test_Scan_Directory_With_Filter(t *testing.T) {
@@ -120,49 +69,24 @@ func Test_Scan_Directory_With_Filter(t *testing.T) {
 	ScanDirectory(tmpDir, filter, &wg)
 	wg.Wait()
 
-	if len(Stats) != 3 {
-		t.Fatalf("expected 3 extensions, got %d: %v", len(Stats), Stats)
-	}
-
 	js := Stats[".js"]
-	if js == nil {
-		t.Fatal("missing .js")
-	}
-	if js.Count != 2 {
-		t.Errorf(".js count = %d, want 2", js.Count)
-	}
-	if js.TotalLines != 7 {
-		t.Errorf(".js lines = %d, want 7", js.TotalLines)
-	}
-	if js.TotalCompFiles != 1 {
-		t.Errorf(".js comp = %d, want 1", js.TotalCompFiles)
-	}
-
 	tsx := Stats[".tsx"]
-	if tsx == nil {
-		t.Fatal("missing .tsx")
-	}
-	if tsx.Count != 2 {
-		t.Errorf(".tsx count = %d, want 2", tsx.Count)
-	}
-	if tsx.TotalLines != 5 {
-		t.Errorf(".tsx lines = %d, want 5", tsx.TotalLines)
-	}
-	if tsx.TotalCompFiles != 2 {
-		t.Errorf(".tsx comp = %d, want 2", tsx.TotalCompFiles)
-	}
-
 	ts := Stats[".ts"]
-	if ts == nil {
-		t.Fatal("missing .ts")
-	}
-	if ts.Count != 1 {
-		t.Errorf(".ts count = %d, want 1", ts.Count)
-	}
-	if ts.TotalLines != 1 {
-		t.Errorf(".ts lines = %d, want 1", ts.TotalLines)
-	}
-	if ts.TotalCompFiles != 0 {
-		t.Errorf(".ts comp = %d, want 0", ts.TotalCompFiles)
-	}
+
+	assert.Len(t, Stats, 3)
+
+	assert.NotNil(t, js)
+	assert.Equal(t, js.Count, 2)
+	assert.Equal(t, js.TotalLines, 7)
+	assert.Equal(t, js.TotalCompFiles, 1)
+
+	assert.NotNil(t, tsx)
+	assert.Equal(t, tsx.Count, 2)
+	assert.Equal(t, tsx.TotalLines, 5)
+	assert.Equal(t, tsx.TotalCompFiles, 2)
+
+	assert.NotNil(t, ts)
+	assert.Equal(t, ts.Count, 1)
+	assert.Equal(t, ts.TotalLines, 1)
+	assert.Equal(t, ts.TotalCompFiles, 0)
 }
