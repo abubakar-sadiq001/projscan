@@ -70,7 +70,7 @@ var files = []struct{ name, content string }{
 
 func Test_Scan_Directory(t *testing.T) {
 	Stats = make(map[string]*FileStats)
-	Mu = &sync.Mutex{}
+	// Mu := sync.Mutex{}
 	var wg sync.WaitGroup
 
 	tmpDir := t.TempDir()
@@ -99,7 +99,7 @@ func Test_Scan_Directory(t *testing.T) {
 
 func Test_Scan_Directory_With_Filter(t *testing.T) {
 	Stats = make(map[string]*FileStats)
-	Mu = &sync.Mutex{}
+	Mu = sync.Mutex{}
 	var wg sync.WaitGroup
 
 	tmpDir := t.TempDir()

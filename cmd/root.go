@@ -35,6 +35,7 @@ var rootCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		var wg sync.WaitGroup
+		fs := helpers.FileStats{}
 
 		version, _ := cmd.Flags().GetBool("version")
 		if version {
@@ -67,13 +68,24 @@ var rootCmd = &cobra.Command{
 			}
 
 			fmt.Printf("\n\n")
-			wg.Add(1)
 			now := time.Now()
 
+			stopSpinner := make(chan struct{})
+			spinnerDone := make(chan struct{})
+			go func() {
+				fs.ShowSpinner(stopSpinner)
+				close(spinnerDone)
+			}()
+
+			wg.Add(1)
 			go helpers.ScanDirectory(args[0], ExtensionArgsSlice, &wg)
 			wg.Wait()
+			close(stopSpinner)
+			<-spinnerDone
 
-			helpers.PrintStats()
+			fs.PrintFilesWithLines()
+			fs.PrintTotalFilesStat()
+
 			elapsed := time.Since(now)
 			fmt.Printf("\n\nScan completed in %s\n", elapsed)
 		}

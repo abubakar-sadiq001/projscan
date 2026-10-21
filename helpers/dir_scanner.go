@@ -9,7 +9,7 @@ import (
 )
 
 var totalComponentFiles int
-var Mu *sync.Mutex
+var Mu sync.Mutex
 
 // FileInfo stores summary information about a single file discovered during scanning.
 type FileInfo struct {
