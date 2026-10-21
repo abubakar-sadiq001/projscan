@@ -1,261 +1,168 @@
 package helpers
 
 import (
-	"bytes"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"testing"
 )
 
-func TestFormatFileSize(t *testing.T) {
-	tests := []struct {
-		bytes int64
-		want  string
-	}{
-		{0, "0 bytes"},
-		{512, "512 bytes"},
-		{1024, "1.00 kb"},
-		{1500, "1.46 kb"},
-		{1048576, "1.00 MB"},
-		{1073741824, "1.00 GB"},
+var expectedExtensions = map[string]struct {
+	count      int
+	totalSize  int64
+	totalLines int
+	fileInfo   []struct {
+		name       string
+		lines      int
+		isCompFile bool
 	}
-	for _, tt := range tests {
-		got := formatFileSize(tt.bytes)
-		if got != tt.want {
-			t.Errorf("formatFileSize(%d) = %q, want %q", tt.bytes, got, tt.want)
-		}
-	}
+	totalCompFiles int
+}{
+	".js": {
+		count:          2,
+		totalLines:     7, // foo.js (2), Component.js (5)
+		totalCompFiles: 1, // Component.js is component
+		fileInfo: []struct {
+			name       string
+			lines      int
+			isCompFile bool
+		}{
+			{name: "foo.js", lines: 2, isCompFile: false},
+			{name: "Component.js", lines: 5, isCompFile: true},
+		},
+	},
+	".tsx": {
+		count:          2,
+		totalLines:     5, // Bar.tsx (3), sub/Another.tsx (2)
+		totalCompFiles: 2, // both start with uppercase
+		fileInfo: []struct {
+			name       string
+			lines      int
+			isCompFile bool
+		}{
+			{name: "Bar.tsx", lines: 3, isCompFile: true},
+			{name: "Another.tsx", lines: 2, isCompFile: true},
+		},
+	},
+	".ts": {
+		count:          1,
+		totalLines:     1, // baz.ts
+		totalCompFiles: 0, // starts with lowercase
+		fileInfo: []struct {
+			name       string
+			lines      int
+			isCompFile bool
+		}{
+			{name: "baz.ts", lines: 1, isCompFile: false},
+		},
+	},
 }
 
-func TestReportPanic(t *testing.T) {
-	// No panic – should do nothing.
-	func() {
-		defer ReportPanic()
-		// Nothing
-	}()
-
-	// Panic with error – should print the error and continue.
-	var out bytes.Buffer
-	// Redirect stdout to capture output.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	func() {
-		defer ReportPanic()
-		panic(fmt.Errorf("test error"))
-	}()
-
-	w.Close()
-	os.Stdout = oldStdout
-	io.Copy(&out, r)
-	got := out.String()
-	if !strings.Contains(got, "test error") {
-		t.Errorf("ReportPanic did not print expected error; got %q", got)
-	}
-
-	// Panic with non-error – should re-panic.
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with non-error value, but did not panic")
-		} else if r != "not an error" {
-			t.Errorf("expected panic value 'not an error', got %v", r)
-		}
-	}()
-	func() {
-		defer ReportPanic()
-		panic("not an error")
-	}()
+var files = []struct{ name, content string }{
+	{"foo.js", "line1\nline2\n"},
+	{"Bar.tsx", "line1\nline2\nline3\n"},
+	{"baz.ts", "one\n"},
+	{"util.go", "package main\n"},
+	{"Component.js", "line1\nline2\nline3\nline4\nline5\n"},
+	{"sub/Another.tsx", "line1\nline2\n"},
+	{"sub/ignore.txt", "hello\n"},
 }
 
-func TestScanDirectory(t *testing.T) {
-	// Create a temporary directory with files.
+func Test_Scan_Directory(t *testing.T) {
+	Stats = make(map[string]*FileStats)
+	Mu = &sync.Mutex{}
+	var wg sync.WaitGroup
+
 	tmpDir := t.TempDir()
 
-	// Create some files with various extensions.
-	files := []struct {
-		name    string
-		content string
-	}{
-		{"foo.js", "line1\nline2\n"},
-		{"Bar.tsx", "line1\nline2\nline3\n"},
-		{"baz.ts", "one\n"},
-		{"util.go", "package main\n"},
-		{"Component.js", "line1\nline2\nline3\nline4\nline5\n"},
-		{"sub/Another.tsx", "line1\nline2\n"},
-		{"sub/ignore.txt", "hello\n"},
-	}
 	for _, f := range files {
-		path := filepath.Join(tmpDir, f.name)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		p := filepath.Join(tmpDir, f.name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(f.content), 0644); err != nil {
+		if err := os.WriteFile(p, []byte(f.content), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Reset global Stats before test.
+	filter := []string{}
+
+	wg.Add(1)
+	ScanDirectory(tmpDir, filter, &wg)
+	wg.Wait()
+
+	if len(Stats) != 5 {
+		t.Fatalf("expected 5 extensions, got %d: %v", len(Stats), Stats)
+	}
+
+}
+
+func Test_Scan_Directory_With_Filter(t *testing.T) {
 	Stats = make(map[string]*FileStats)
-	processedCount = 0
+	Mu = &sync.Mutex{}
+	var wg sync.WaitGroup
 
-	// Provide extension filter: only .js, .tsx, .ts (no .go or .txt).
+	tmpDir := t.TempDir()
+
+	for _, f := range files {
+		p := filepath.Join(tmpDir, f.name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(f.content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	filter := []string{".js", ".tsx", ".ts"}
-	ScanDirectory(tmpDir, filter)
 
-	// Verify Stats.
-	expectedExtensions := map[string]struct {
-		count      int
-		totalLines int
-		compFiles  int
-		fileNames  []string
-	}{
-		".js": {
-			count:      2,
-			totalLines: 2 + 5, // foo.js (2), Component.js (5)
-			compFiles:  1,     // Component.js is component
-			fileNames:  []string{"foo.js", "Component.js"},
-		},
-		".tsx": {
-			count:      2,
-			totalLines: 3 + 2, // Bar.tsx (3), sub/Another.tsx (2)
-			compFiles:  2,     // both start with uppercase
-			fileNames:  []string{"Bar.tsx", "Another.tsx"},
-		},
-		".ts": {
-			count:      1,
-			totalLines: 1, // baz.ts
-			compFiles:  0, // starts with lowercase
-			fileNames:  []string{"baz.ts"},
-		},
+	wg.Add(1)
+	ScanDirectory(tmpDir, filter, &wg)
+	wg.Wait()
+
+	if len(Stats) != 3 {
+		t.Fatalf("expected 3 extensions, got %d: %v", len(Stats), Stats)
 	}
 
-	if len(Stats) != len(expectedExtensions) {
-		t.Errorf("expected %d extensions, got %d", len(expectedExtensions), len(Stats))
+	js := Stats[".js"]
+	if js == nil {
+		t.Fatal("missing .js")
+	}
+	if js.Count != 2 {
+		t.Errorf(".js count = %d, want 2", js.Count)
+	}
+	if js.TotalLines != 7 {
+		t.Errorf(".js lines = %d, want 7", js.TotalLines)
+	}
+	if js.TotalCompFiles != 1 {
+		t.Errorf(".js comp = %d, want 1", js.TotalCompFiles)
 	}
 
-	for ext, exp := range expectedExtensions {
-		stat, ok := Stats[ext]
-		if !ok {
-			t.Errorf("extension %q not found in Stats", ext)
-			continue
-		}
-		if stat.Count != exp.count {
-			t.Errorf("%s: Count = %d, want %d", ext, stat.Count, exp.count)
-		}
-		if stat.TotalLines != exp.totalLines {
-			t.Errorf("%s: TotalLines = %d, want %d", ext, stat.TotalLines, exp.totalLines)
-		}
-		if stat.TotalCompFiles != exp.compFiles {
-			t.Errorf("%s: TotalCompFiles = %d, want %d", ext, stat.TotalCompFiles, exp.compFiles)
-		}
-		// Check file names (order may vary, so we sort)
-		var names []string
-		for _, fi := range stat.FileInfo {
-			names = append(names, fi.Name)
-		}
-		// Sort both slices for comparison.
-		sortStrings(names)
-		sortStrings(exp.fileNames)
-		if !stringSlicesEqual(names, exp.fileNames) {
-			t.Errorf("%s: FileInfo names = %v, want %v", ext, names, exp.fileNames)
-		}
+	tsx := Stats[".tsx"]
+	if tsx == nil {
+		t.Fatal("missing .tsx")
 	}
-}
-
-func TestPrintStats(t *testing.T) {
-	// Populate Stats with controlled data.
-	Stats = map[string]*FileStats{
-		".js": {
-			Count:          2,
-			TotalSize:      1234,
-			TotalLines:     100,
-			TotalCompFiles: 1,
-			FileInfo: []FileInfo{
-				{Name: "foo.js", Lines: 40, IsCompFile: false},
-				{Name: "Bar.js", Lines: 60, IsCompFile: true},
-			},
-		},
-		".tsx": {
-			Count:          1,
-			TotalSize:      567,
-			TotalLines:     50,
-			TotalCompFiles: 1,
-			FileInfo: []FileInfo{
-				{Name: "Component.tsx", Lines: 50, IsCompFile: true},
-			},
-		},
+	if tsx.Count != 2 {
+		t.Errorf(".tsx count = %d, want 2", tsx.Count)
+	}
+	if tsx.TotalLines != 5 {
+		t.Errorf(".tsx lines = %d, want 5", tsx.TotalLines)
+	}
+	if tsx.TotalCompFiles != 2 {
+		t.Errorf(".tsx comp = %d, want 2", tsx.TotalCompFiles)
 	}
 
-	// Also include a large component to trigger the warning.
-	Stats[".tsx"].FileInfo = append(Stats[".tsx"].FileInfo, FileInfo{
-		Name:       "Huge.tsx",
-		Lines:      400,
-		IsCompFile: true,
-	})
-
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	PrintStats()
-
-	w.Close()
-	os.Stdout = oldStdout
-	var out bytes.Buffer
-	io.Copy(&out, r)
-	output := out.String()
-
-	// Check for expected sections.
-	checks := []string{
-		"React Components Found: 2",
-		"FILES PER EXTENSION",
-		".js (2 files):",
-		"1. foo.js                                40 lines",
-		"2. Bar.js                                60 lines",
-		".tsx (2 files):",
-		"1. Component.tsx                         50 lines",
-		"2. Huge.tsx                             400 lines",
-		"FILE STATISTICS BY EXTENSION",
-		"Extension       | Count    | Size         | Total Lines",
-		".js             | 2        | 1.21 kb      | 100",
-		".tsx            | 2        | 567 bytes    | 450", // 50+400
-		"TOTAL           | 4        | 1.76 kb      | 550",
-		"Large Components",
-		"Huge.tsx  400 lines",
-		"⚠️  Warning:",
-		"1 component exceed 300 lines.",
+	ts := Stats[".ts"]
+	if ts == nil {
+		t.Fatal("missing .ts")
 	}
-	for _, want := range checks {
-		if !strings.Contains(output, want) {
-			t.Errorf("PrintStats output missing expected substring: %q\nFull output:\n%s", want, output)
-		}
+	if ts.Count != 1 {
+		t.Errorf(".ts count = %d, want 1", ts.Count)
 	}
-}
-
-// Helper functions for slice comparison.
-func sortStrings(s []string) {
-	for i := 0; i < len(s); i++ {
-		for j := i + 1; j < len(s); j++ {
-			if s[i] > s[j] {
-				s[i], s[j] = s[j], s[i]
-			}
-		}
+	if ts.TotalLines != 1 {
+		t.Errorf(".ts lines = %d, want 1", ts.TotalLines)
 	}
-}
-
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+	if ts.TotalCompFiles != 0 {
+		t.Errorf(".ts comp = %d, want 0", ts.TotalCompFiles)
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

@@ -1,0 +1,48 @@
+version: 2
+
+project_name: projscan
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - binary: projscan
+    main: .
+    env:
+      - CGO_ENABLED=0
+
+    goos:
+      - linux
+      - windows
+      - darwin
+
+    goarch:
+      - amd64
+      - arm64
+
+    # This injects the real values during release.
+    ldflags:
+      - -s -w
+      - -X github.com/abubakar-sadiq001/projscan/helpers.Version={{.Version}}
+      - -X github.com/abubakar-sadiq001/projscan/helpers.Commit={{.Commit}}
+      - -X github.com/abubakar-sadiq001/projscan/helpers.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+
+release:
+  draft: false
+  prerelease: auto
